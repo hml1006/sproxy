@@ -164,20 +164,33 @@ async fn deal_client_connect(mut client: TcpStream) -> Result<(), Box<dyn Error>
         return Ok(())
     }
     if let State::Established = resp_state {
-        client.write_all(b"HTTP/1.0 200 Connection Established\r\n\r\n").await;
+        let _ = client.write_all(b"HTTP/1.0 200 Connection Established\r\n\r\n").await;
     }
 
-    println!("will connect ===> {}", path);
     let remote_addr_list: Vec<SocketAddr> = tokio::net::lookup_host(path).await?.collect();
     if remote_addr_list.len() == 0 {
         return Err("Lookup host failed".into());
     }
+    println!("will connect ===> {}, addr ===> {}", path, remote_addr_list.get(0).unwrap().to_string());
     let remote = TcpStream::connect(remote_addr_list.get(0).unwrap()).await;
     if remote.is_err() {
         println!("remote error: {}", &remote.unwrap_err().to_string());
         return Err("connect remote server failed".into());
     }
     let remote = remote.unwrap();
+    if client.peer_addr().is_err() {
+        println!("client peer address error => {}", client.peer_addr().err().unwrap().to_string());
+        return Err(client.peer_addr().err().unwrap().into());
+    } else if client.local_addr().is_err() {
+        println!("client local address error => {}", client.local_addr().err().unwrap().to_string());
+        return Err(client.local_addr().err().unwrap().into());
+    } else if remote.local_addr().is_err() {
+        println!("remote local address error => {}", remote.local_addr().err().unwrap().to_string());
+        return Err(remote.local_addr().err().unwrap().into());
+    } else if remote.peer_addr().is_err() {
+        println!("remote peer  address error => {}", remote.peer_addr().err().unwrap().to_string());
+        return  Err(remote.peer_addr().err().unwrap().into());
+    }
     if client.peer_addr().is_ok() && client.local_addr().is_ok() && remote.peer_addr().is_ok() && remote.local_addr().is_ok() {
         println!("proxy    {} --- {} <=====> {} --- {}", &client.peer_addr().unwrap().to_string(), &client.local_addr().unwrap().to_string(),
                  &remote.local_addr().unwrap().to_string(), &remote.peer_addr().unwrap().to_string());
