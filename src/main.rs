@@ -158,17 +158,16 @@ async fn deal_client_connect(mut client: TcpStream) -> Result<(), Box<dyn Error>
     }
     
     // deal response
-    let ret = match resp_state {
-        State::Established => {
-            client.write_all(b"HTTP/1.0 200 Connection Established\r\n\r\n").await
-        }
-        State::Unauthorized => {
-            client.write_all(b"HTTP/1.1 407 Unauthorized\r\nProxy-Authenticate: Basic realm=\"Access to the remote site\"\r\n\r\n").await
-        }
-    };
-    if ret.is_err() {
-        return Err(ret.unwrap_err().into());
+    if let State::Unauthorized = resp_state {
+        let _ = client.write_all(b"HTTP/1.1 407 Unauthorized\r\nProxy-Authenticate: Basic realm=\"Access to the remote site\"\r\n\r\n").await;
+        let _ = client.shutdown().await;
+        return Ok(())
     }
+    if let State::Established = resp_state {
+        client.write_all(b"HTTP/1.0 200 Connection Established\r\n\r\n").await;
+    }
+
+    println!("will connect ===> {}", path);
     let remote_addr_list: Vec<SocketAddr> = tokio::net::lookup_host(path).await?.collect();
     if remote_addr_list.len() == 0 {
         return Err("Lookup host failed".into());
@@ -179,8 +178,12 @@ async fn deal_client_connect(mut client: TcpStream) -> Result<(), Box<dyn Error>
         return Err("connect remote server failed".into());
     }
     let remote = remote.unwrap();
-    println!("proxy    {} --- {} <=====> {} --- {}", &client.peer_addr().unwrap().to_string(), &client.local_addr().unwrap().to_string(),
-             &remote.local_addr().unwrap().to_string(), &remote.peer_addr().unwrap().to_string());
+    if client.peer_addr().is_ok() && client.local_addr().is_ok() && remote.peer_addr().is_ok() && remote.local_addr().is_ok() {
+        println!("proxy    {} --- {} <=====> {} --- {}", &client.peer_addr().unwrap().to_string(), &client.local_addr().unwrap().to_string(),
+                 &remote.local_addr().unwrap().to_string(), &remote.peer_addr().unwrap().to_string());
+    } else {
+        return Err("client or remote maybe closed".into());
+    }
     forward(client, remote).await;
 
     Ok(())
