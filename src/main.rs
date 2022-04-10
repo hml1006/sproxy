@@ -173,7 +173,12 @@ async fn deal_client_connect(mut client: TcpStream) -> Result<(), Box<dyn Error>
     if remote_addr_list.len() == 0 {
         return Err("Lookup host failed".into());
     }
-    let remote = TcpStream::connect(remote_addr_list.get(0).unwrap()).await?;
+    let remote = TcpStream::connect(remote_addr_list.get(0).unwrap()).await;
+    if remote.is_err() {
+        println!("remote error: {}", &remote.unwrap_err().to_string());
+        return Err("connect remote server failed".into());
+    }
+    let remote = remote.unwrap();
     println!("proxy    {} --- {} <=====> {} --- {}", &client.peer_addr().unwrap().to_string(), &client.local_addr().unwrap().to_string(),
              &remote.local_addr().unwrap().to_string(), &remote.peer_addr().unwrap().to_string());
     forward(client, remote).await;
